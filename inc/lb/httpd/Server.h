@@ -21,6 +21,7 @@
 #include <microhttpd.h>
 
 #include <functional>
+#include <memory>
 #include <string>
 #include <unordered_map>
 
@@ -77,41 +78,8 @@ public:
   ~Server();
 
 private:
-  static MHD_Result keyValueIterator( void* userData
-                                    , enum MHD_ValueKind kind
-                                    , const char* key
-                                    , const char* value );
-
-  static MHD_Result postDataIterator( void* userData
-                                    , MHD_ValueKind kind
-                                    , const char* key
-                                    , const char* filename
-                                    , const char* content_type
-                                    , const char* transfer_encoding
-                                    , const char* data
-                                    , uint64_t off
-                                    , size_t size );
-
-  static MHD_Result accessHandlerCallback( void* cls
-                                         , MHD_Connection*
-                                         , const char* url
-                                         , const char* method
-                                         , const char* version
-                                         , const char* upload_data
-                                         , size_t* upload_data_size
-                                         , void** connectionContext );
-
-  Response invokeRequestHandler( MHD_Connection*
-                               , std::string
-                               , Method
-                               , Version
-                               , std::string );
-
-  MHD_Daemon*const mhd;
-
-  RequestHandler requestHandler;
-
-  PostKeyValues postKeyValues;
+  struct Private;
+  std::unique_ptr<Private> d;
 };
 
 

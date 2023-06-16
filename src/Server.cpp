@@ -29,6 +29,49 @@ namespace httpd
 {
 
 
+struct Server::Private
+{
+  Private( int port , RequestHandler rh );
+  ~Private();
+
+  static MHD_Result keyValueIterator( void* userData
+                                    , enum MHD_ValueKind kind
+                                    , const char* key
+                                    , const char* value );
+
+  static MHD_Result postDataIterator( void* userData
+                                    , MHD_ValueKind kind
+                                    , const char* key
+                                    , const char* filename
+                                    , const char* content_type
+                                    , const char* transfer_encoding
+                                    , const char* data
+                                    , uint64_t off
+                                    , size_t size );
+
+  static MHD_Result accessHandlerCallback( void* cls
+                                         , MHD_Connection*
+                                         , const char* url
+                                         , const char* method
+                                         , const char* version
+                                         , const char* upload_data
+                                         , size_t* upload_data_size
+                                         , void** connectionContext );
+
+  Response invokeRequestHandler( MHD_Connection*
+                               , std::string
+                               , Method
+                               , Version
+                               , std::string );
+
+  MHD_Daemon*const mhd;
+
+  RequestHandler requestHandler;
+
+  PostKeyValues postKeyValues;
+};
+
+
 static
 Server::Method parseMethod( const char* methodStr )
 {
@@ -80,7 +123,7 @@ Server::Version parseVersion( const char* versionStr )
 }
 
 
-Server::Server( int port , RequestHandler rh )
+Server::Private::Private( int port , RequestHandler rh )
   : mhd{ MHD_start_daemon( MHD_USE_INTERNAL_POLLING_THREAD | MHD_USE_ERROR_LOG
                          , port
                          , nullptr // accept policy callback not required
@@ -92,7 +135,7 @@ Server::Server( int port , RequestHandler rh )
 {
 }
 
-Server::~Server()
+Server::Private::~Private()
 {
   MHD_stop_daemon( mhd );
 }
@@ -103,16 +146,16 @@ struct ConnectionContext
 };
 
 // static
-MHD_Result Server::accessHandlerCallback( void* userData
-                                        , MHD_Connection* connection
-                                        , const char* url
-                                        , const char* methodStr
-                                        , const char* version
-                                        , const char* uploadData
-                                        , size_t* uploadDataSize
-                                        , void** connectionContext )
+MHD_Result Server::Private::accessHandlerCallback( void* userData
+                                                 , MHD_Connection* connection
+                                                 , const char* url
+                                                 , const char* methodStr
+                                                 , const char* version
+                                                 , const char* uploadData
+                                                 , size_t* uploadDataSize
+                                                 , void** connectionContext )
 {
-  auto server = (Server*)userData;
+  auto server = (Private*)userData;
 
 //  std::cout << "URL:              " << url << '\n';
 //  std::cout << "Method:           " << methodStr << '\n';
@@ -212,25 +255,25 @@ MHD_Result Server::accessHandlerCallback( void* userData
 
 
 // static
-MHD_Result Server::keyValueIterator( void* userData
-                                   , enum MHD_ValueKind kind
-                                   , const char *key
-                                   , const char *value )
+MHD_Result Server::Private::keyValueIterator( void* userData
+                                            , enum MHD_ValueKind kind
+                                            , const char *key
+                                            , const char *value )
 {
   std::cout << "key: " << key << ", value: " << value << std::endl;
   return MHD_YES;
 }
 
 // static
-MHD_Result Server::postDataIterator( void* userData
-                                   , MHD_ValueKind kind
-                                   , const char* key
-                                   , const char* filename
-                                   , const char* contentType
-                                   , const char* transferEncoding
-                                   , const char* data
-                                   , uint64_t off
-                                   , size_t size )
+MHD_Result Server::Private::postDataIterator( void* userData
+                                            , MHD_ValueKind kind
+                                            , const char* key
+                                            , const char* filename
+                                            , const char* contentType
+                                            , const char* transferEncoding
+                                            , const char* data
+                                            , uint64_t off
+                                            , size_t size )
 {
 //  std::cout << "PP ITERATOR \n";
 //  std::cout << " key: " << key << '\n';
@@ -251,7 +294,7 @@ MHD_Result Server::postDataIterator( void* userData
 //  std::cout << " size: " << size << '\n';
 //  std::cout << std::flush;
 
-  auto server = (Server*)userData;
+  auto server = (Private*)userData;
 
   const auto I{ server->postKeyValues.find( key ) };
   if ( I != server->postKeyValues.end() )
@@ -268,11 +311,11 @@ MHD_Result Server::postDataIterator( void* userData
   return MHD_YES;
 }
 
-Server::Response Server::invokeRequestHandler( MHD_Connection* connection
-                                             , std::string url
-                                             , Method method
-                                             , Version version
-                                             , std::string payload )
+Server::Response Server::Private::invokeRequestHandler( MHD_Connection* connection
+                                                      , std::string url
+                                                      , Method method
+                                                      , Version version
+                                                      , std::string payload )
 {
 //  std::cout << "HEADERS:" << std::endl;
 //  std::cout << MHD_get_connection_values( connection, MHD_HEADER_KIND, &keyValueIterator, this ) << std::endl;
@@ -285,6 +328,16 @@ Server::Response Server::invokeRequestHandler( MHD_Connection* connection
   postKeyValues.clear();
 
   return response;
+}
+
+
+Server::Server( int port , RequestHandler rh )
+  : d{ std::make_unique<Private>( port, std::move( rh ) ) }
+{
+}
+
+Server::~Server()
+{
 }
 
 
