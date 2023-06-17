@@ -60,6 +60,7 @@ public:
     e2_0,
   };
 
+  using Headers       = std::unordered_map< std::string, std::string >;
   using PostKeyValues = std::unordered_map< std::string, std::string >;
 
   struct Response
@@ -71,10 +72,17 @@ public:
   using RequestHandler = std::function< Response( std::string, // url
                                                   Method,
                                                   Version,
+                                                  Headers,
                                                   std::string,
-                                                  const PostKeyValues& ) >; // request payload
+                                                  PostKeyValues ) >; // request payload
 
+  /** \brief Constructor for plain HTTP only. Starts the server. */
   Server( int port, RequestHandler );
+
+  /** \brief Constructor for HTTPS only. Starts the server. */
+  Server( int port, std::string httpsCert, std::string httpsPrivateKey, RequestHandler );
+
+  /** \brief Destructor. Stops the server. */
   ~Server();
 
 private:

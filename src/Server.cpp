@@ -32,6 +32,7 @@ namespace httpd
 struct Server::Private
 {
   Private( int port , RequestHandler rh );
+  Private( int port , std::string httpsCert, std::string httpsPrivateKey, RequestHandler rh );
   ~Private();
 
   static MHD_Result keyValueIterator( void* userData
@@ -68,6 +69,7 @@ struct Server::Private
 
   RequestHandler requestHandler;
 
+  Headers       headers;
   PostKeyValues postKeyValues;
 };
 
@@ -131,7 +133,21 @@ Server::Private::Private( int port , RequestHandler rh )
                          , &accessHandlerCallback
                          , this
                          , MHD_OPTION_END ) }
-  , requestHandler{ rh }
+  , requestHandler{ std::move( rh ) }
+{
+}
+
+Server::Private::Private( int port , std::string httpsCert, std::string httpsPrivateKey, RequestHandler rh )
+  : mhd{ MHD_start_daemon( MHD_USE_INTERNAL_POLLING_THREAD | MHD_USE_ERROR_LOG | MHD_USE_TLS
+                         , port
+                         , nullptr // accept policy callback not required
+                         , nullptr // accept policy callback user data
+                         , &accessHandlerCallback
+                         , this
+                         , MHD_OPTION_HTTPS_MEM_CERT, httpsCert.c_str()
+                         , MHD_OPTION_HTTPS_MEM_KEY, httpsPrivateKey.c_str()
+                         , MHD_OPTION_END ) }
+  , requestHandler{ std::move( rh ) }
 {
 }
 
@@ -260,7 +276,12 @@ MHD_Result Server::Private::keyValueIterator( void* userData
                                             , const char *key
                                             , const char *value )
 {
-  std::cout << "key: " << key << ", value: " << value << std::endl;
+//  std::cout << "key: " << key << ", value: " << value << std::endl;
+
+  auto server = (Private*)userData;
+
+  server->headers[ key ] = value;
+
   return MHD_YES;
 }
 
@@ -320,12 +341,21 @@ Server::Response Server::Private::invokeRequestHandler( MHD_Connection* connecti
 //  std::cout << "HEADERS:" << std::endl;
 //  std::cout << MHD_get_connection_values( connection, MHD_HEADER_KIND, &keyValueIterator, this ) << std::endl;
 
+  Headers       headers;
+  PostKeyValues postKeyValues;
+
+  headers.swap( this->headers );
+  postKeyValues.swap( this->postKeyValues );
+
   auto response
   {
-    requestHandler( std::move( url ), method, version, std::move( payload ), std::move( postKeyValues ) )
+    requestHandler( std::move( url )
+                  , method
+                  , version
+                  , std::move( headers )
+                  , std::move( payload )
+                  , std::move( postKeyValues ) )
   };
-
-  postKeyValues.clear();
 
   return response;
 }
@@ -333,6 +363,14 @@ Server::Response Server::Private::invokeRequestHandler( MHD_Connection* connecti
 
 Server::Server( int port , RequestHandler rh )
   : d{ std::make_unique<Private>( port, std::move( rh ) ) }
+{
+}
+
+Server::Server( int port, std::string httpsCert, std::string httpsPrivateKey, RequestHandler rh )
+  : d{ std::make_unique<Private>( port
+                                , std::move( httpsCert )
+                                , std::move( httpsPrivateKey )
+                                , std::move( rh ) ) }
 {
 }
 
