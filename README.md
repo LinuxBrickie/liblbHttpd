@@ -7,6 +7,7 @@ lb is short for LinuxBrickie, my online handle.
 ## Dependencies
 
 The main library dependencies are
+- liblbEncoding (available from my github account, licensed under GPL-3.0-or-later)
 - libmicrohttpd (licensed under LGPL-2.1-or-later)
 
 In addition the gtest binary dependencies are

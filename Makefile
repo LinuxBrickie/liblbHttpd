@@ -9,8 +9,12 @@ GTESTDIR := gtest
 GTESTBUILDDIR := .
 GTESTTARGET := serverTests
 
+LBENCODINGPATH := ../liblbEncoding
+LBENCODINGINC := -I $(LBENCODINGPATH)/inc
+LBENCODINGLD := -L$(LBENCODINGPATH) -llbEncoding
+
 # List of all .cpp source files.
-CPP = $(wildcard $(SRCDIR)/*.cpp)
+CPP = $(wildcard $(SRCDIR)/*.cpp) $(wildcard $(SRCDIR)/ws/*.cpp)
 GTESTCPP = $(wildcard $(GTESTDIR)/*.cpp)
 
 # All .o files go to build dir.
@@ -27,10 +31,10 @@ debug: all
 all: $(TARGET) $(GTESTTARGET)
 
 $(TARGET): $(OBJ)
-	$(COMPILE) -shared -lmicrohttpd -o $(TARGET) $(OBJ)
+	$(COMPILE) -shared -lmicrohttpd $(LBENCODINGLD) -o $(TARGET) $(OBJ)
 
 $(GTESTTARGET): $(GTESTOBJ) $(TARGET)
-	$(COMPILE) -Wl,-rpath,$(BUILDDIR) -L$(BUILDDIR) -lgtest -llbHttpd -o $(GTESTTARGET)  $(GTESTOBJ)
+	$(COMPILE) -Wl,-rpath,$(BUILDDIR) $(LBENCODINGLD) -L$(BUILDDIR) -lgtest -llbHttpd -o $(GTESTTARGET)  $(GTESTOBJ)
 
 # Include all .d files
 -include $(DEP)
@@ -38,7 +42,7 @@ $(GTESTTARGET): $(GTESTOBJ) $(TARGET)
 
 $(BUILDDIR)/$(SRCDIR)/%.o : $(SRCDIR)/%.cpp
 	mkdir -p $(@D)
-	$(COMPILE) $(DEBUG) -c $(CXXFLAGS) -o $@ $<
+	$(COMPILE) $(DEBUG) $(LBENCODINGINC) -c $(CXXFLAGS) -o $@ $<
 
 $(GTESTBUILDDIR)/$(GTESTDIR)/%.o : $(GTESTDIR)/%.cpp
 	mkdir -p $(@D)
