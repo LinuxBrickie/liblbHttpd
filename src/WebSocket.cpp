@@ -103,7 +103,7 @@ bool WebSocket::parseFrame( char* p, size_t numBytes )
       // "The server MUST close the connection upon receiving a frame that is
       //  not masked.  In this case, a server MAY send a Close frame with a
       // status code of 1002 (protocol error) as defined in Section 7.4.1"
-      closeConnection( encoding::websocket::CloseStatusCode::eProtocolError );
+      closeConnection( encoding::websocket::closestatus::ProtocolCode::eProtocolError );
       return false;
     }
 
@@ -196,14 +196,14 @@ WebSocket::sendMessage( std::string payload, size_t maxFrameSize )
   return ws::SendResult::eSuccess;
 }
 
-ws::SendResult WebSocket::sendClose( encoding::websocket::CloseStatusCode code
+ws::SendResult WebSocket::sendClose( encoding::websocket::closestatus::PayloadCode code
                                    , std::string reason )
 {
   encoding::websocket::Header header;
   header.opCode = encoding::websocket::Header::OpCode::eConnectionClose;
 
   std::string payload( "\0\0", 2 );
-  encoding::websocket::encodePayloadCloseStatusCode( code, payload );
+  encoding::websocket::closestatus::encodePayloadCode( code, payload );
   payload += reason;
 
   header.payloadSize = payload.size();
@@ -279,7 +279,7 @@ WebSocket::sendFrame( const encoding::websocket::Header& header
   return ws::SendResult::eSuccess;
 }
 
-void WebSocket::closeConnection( encoding::websocket::CloseStatusCode statusCode
+void WebSocket::closeConnection( encoding::websocket::closestatus::ProtocolCode statusCode
                                , const std::string& reason )
 {
   // RFC6455 Section 5.5.1 states
@@ -303,7 +303,9 @@ void WebSocket::closeConnection( encoding::websocket::CloseStatusCode statusCode
   header.opCode = encoding::websocket::Header::OpCode::eConnectionClose;
 
   std::string payload( "\x00\x00", 2 );
-  encoding::websocket::encodePayloadCloseStatusCode( statusCode, payload );
+  encoding::websocket::closestatus::encodePayloadCode(
+        encoding::websocket::closestatus::toPayload( statusCode ),
+        payload );
   payload.append( reason );
   header.payloadSize = payload.size();
 

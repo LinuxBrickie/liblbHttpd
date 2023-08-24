@@ -54,7 +54,7 @@ public:
   Senders& operator=( const Senders& ) = default;
 
   SendResult sendData( std::string message, size_t maxFrameSize );
-  SendResult sendClose( encoding::websocket::CloseStatusCode, std::string reason = {} );
+  SendResult sendClose( encoding::websocket::closestatus::PayloadCode, std::string reason = {} );
   SendResult sendPing( std::string payload ) const;
   SendResult sendPong( std::string payload ) const;
 

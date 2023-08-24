@@ -41,7 +41,7 @@ SendResult Senders::sendData( std::string message, size_t maxFrameSize )
   return SendResult::eNoImplementation;
 }
 
-SendResult Senders::sendClose( encoding::websocket::CloseStatusCode code
+SendResult Senders::sendClose( encoding::websocket::closestatus::PayloadCode code
                              , std::string reason )
 {
   if ( d )

@@ -83,7 +83,7 @@ struct WebSocket
    */
   ws::SendResult sendMessage( std::string, size_t maxFrameSize );
 
-  ws::SendResult sendClose( encoding::websocket::CloseStatusCode, std::string );
+  ws::SendResult sendClose( encoding::websocket::closestatus::PayloadCode, std::string );
 
   ws::SendResult sendPing( std::string payload );
   ws::SendResult sendPong( std::string payload );
@@ -99,7 +99,7 @@ struct WebSocket
       it SHOULD initiate a TCP Close immediately, and when a client is instructed
       to do the same, it SHOULD wait for a TCP Close from the server.
    */
-  void closeConnection( encoding::websocket::CloseStatusCode statusCode
+  void closeConnection( encoding::websocket::closestatus::ProtocolCode statusCode
                       , const std::string& reason = {} );
 
 

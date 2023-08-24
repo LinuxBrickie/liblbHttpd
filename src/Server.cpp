@@ -274,7 +274,7 @@ Server::Private::~Private()
   // Close any WebSocket connections that have not been closed by the client.
   for ( auto&[id, ws] : webSockets )
   {
-    ws.closeConnection( encoding::websocket::CloseStatusCode::eGoingAway );
+    ws.closeConnection( encoding::websocket::closestatus::ProtocolCode::eGoingAway );
   }
   webSockets.clear();
 
