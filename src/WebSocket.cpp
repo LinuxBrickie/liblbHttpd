@@ -109,13 +109,67 @@ bool WebSocket::parseFrame( char* p, size_t numBytes )
 
     switch ( frame.header.opCode )
     {
-    case encoding::websocket::Header::OpCode::eText: // Fall through
-    case encoding::websocket::Header::OpCode::eBinary: // Fall through
+    case encoding::websocket::Header::OpCode::eText:
+      if ( fragmented )
+      {
+        closeConnection( encoding::websocket::closestatus::ProtocolCode::eProtocolError
+                       , "Unexpected text frame received, expected continuation." );
+        return false;
+      }
+      if ( frame.header.fin )
+      {
+        receivers.receiveData( connectionID
+                             , ws::Receivers::DataOpCode::eText
+                             , std::move( frame.payload ) );
+      }
+      else // must be the first frame of a fragmented text message
+      {
+        fragmented = { ws::Receivers::DataOpCode::eText, std::move( frame.payload ) };
+      }
+      break;
+    case encoding::websocket::Header::OpCode::eBinary:
+      if ( fragmented )
+      {
+        closeConnection( encoding::websocket::closestatus::ProtocolCode::eProtocolError
+                       , "Unexpected binary frame received, expected continuation." );
+        return false;
+      }
+      if ( frame.header.fin )
+      {
+        receivers.receiveData( connectionID
+                             , ws::Receivers::DataOpCode::eBinary
+                             , std::move( frame.payload ) );
+      }
+      else // must be the first frame of a fragmented binary message
+      {
+        fragmented = { ws::Receivers::DataOpCode::eBinary, std::move( frame.payload ) };
+      }
+      break;
     case encoding::websocket::Header::OpCode::eContinuation:
-      receivers.receiveData( connectionID, std::move( frame.payload ) );
+      if ( !fragmented )
+      {
+        closeConnection( encoding::websocket::closestatus::ProtocolCode::eProtocolError
+                       , "Unexpected continuation frame received.");
+        return false;
+      }
+      if ( frame.header.fin )
+      {
+        receivers.receiveData( connectionID
+                             , fragmented->dataOpCode
+                             , std::move( fragmented->payload ) );
+        fragmented.reset();
+      }
+      else // must be the first frame of a fragmented text message
+      {
+        fragmented = { ws::Receivers::DataOpCode::eText, std::move( frame.payload ) };
+      }
       break;
     case encoding::websocket::Header::OpCode::eConnectionClose:
     {
+      receivers.receiveControl( connectionID
+                              , ws::Receivers::ControlOpCode::eClose
+                              , frame.payload );
+
       // Parrot back the payload as per the RFC. Note we can't pass frame.header
       // here as this will have the masking bit set.
       encoding::websocket::Header header;
@@ -127,6 +181,10 @@ bool WebSocket::parseFrame( char* p, size_t numBytes )
     }
     case encoding::websocket::Header::OpCode::ePing:
     {
+      receivers.receiveControl( connectionID
+                              , ws::Receivers::ControlOpCode::ePing
+                              , frame.payload );
+
       // Parrot back the payload as per the RFC. Note we can't pass frame.header
       // here as this will have the masking bit set.
       encoding::websocket::Header header;
@@ -136,7 +194,9 @@ bool WebSocket::parseFrame( char* p, size_t numBytes )
       break;
     }
     case encoding::websocket::Header::OpCode::ePong:
-      std::cout << "Pong received: " << frame.payload << std::endl;
+      receivers.receiveControl( connectionID
+                              , ws::Receivers::ControlOpCode::eClose
+                              , frame.payload );
       break;
     }
   }

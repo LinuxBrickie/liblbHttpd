@@ -20,6 +20,7 @@
 
 #include <functional>
 #include <mutex>
+#include <optional>
 
 #include <lb/httpd/Server.h>
 
@@ -117,6 +118,13 @@ struct WebSocket
   ws::Receivers receivers; //!< Provided via Handler::connectionEstablished
 
   encoding::websocket::Decoder frameParser;
+
+  struct Fragmented
+  {
+    ws::Receivers::DataOpCode dataOpCode;
+    std::string payload;
+  };
+  std::optional<Fragmented> fragmented;
 };
 
 } // End of namespace httpd

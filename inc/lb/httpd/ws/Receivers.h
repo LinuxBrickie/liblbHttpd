@@ -39,7 +39,7 @@ namespace ws
 
 /** \brief The means of receiving from the WebSocket.
 
-    This is provided *to* the \a Handler via the return value of its
+    This is provided *to* the \a Handler via the return value of your
     \a ConnectionEstablished callback.
 
     Fragmented (data) messages are reassembled by Requester so that what you
@@ -56,7 +56,12 @@ namespace ws
 class Receivers
 {
 public:
-  using DataReceiver = std::function< void( ConnectionID, std::string ) >;
+  enum class DataOpCode
+  {
+    eText,
+    eBinary
+  };
+  using DataReceiver = std::function< void( ConnectionID, DataOpCode, std::string ) >;
   enum class ControlOpCode
   {
     eClose,
@@ -75,14 +80,34 @@ public:
   Receivers( const Receivers& ) = default;
   Receivers& operator=( const Receivers& ) = default;
 
-  bool receiveData( ConnectionID, std::string );
+  /**
+      \brief Server calls this to invoke the DataReceiver.
+      \return True unless the instance is default constructed.
+
+      Once \a stopReceiving() is called this becomes a no-op (which still
+      returns true).
+   */
+  bool receiveData( ConnectionID, DataOpCode, std::string );
+
+  /**
+      \brief Server calls this to invoke the ControlReceiver.
+      \return True unless the instance is default constructed.
+
+      Once \a stopReceiving() is called this becomes a no-op (which still
+      returns true).
+   */
   bool receiveControl( ConnectionID, ControlOpCode, std::string );
 
   /**
-      \brief Call this to ensure your function objects are not invoked again.
+      \brief Call this to ensure your \a DataReceiver and/or \a ControlReceiver
+             function objects are not invoked again.
 
-      This is intended to be used when the functions passed in to the
-      constructor are no longer safe to call.
+      This is only intended to be used if the functions that you pass in to the
+      constructor will be no longer safe to call, otherwise you don't need it.
+      If you do need it then make sure you call it *before* invalidating your
+      functions.
+
+      The Server will not call this.
    */
   void stopReceiving();
 

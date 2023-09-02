@@ -4,13 +4,22 @@ An AGPL-3.0-or-later C++ library for serving HTTP requests.
 
 lb is short for LinuxBrickie, my online handle.
 
+A basic WebSocket echo server, based on the library, is also provided as a
+command line tool. This is also AGPL-3.0-or-later.
+
 ## Dependencies
 
 The main library dependencies are
 - liblbEncoding (available from my github account, licensed under GPL-3.0-or-later)
 - libmicrohttpd (licensed under LGPL-2.1-or-later)
 
-In addition the gtest binary dependencies are
+The WebSocket echo server tool dependencies are
+- liblbHttpd (this library)
+- liblbEncoding (available from my github account, licensed under GPL-3.0-or-later)
+
+The gtest binary dependencies are
+- liblbHttpd (this library)
+- liblbEncoding (available from my github account, licensed under GPL-3.0-or-later)
 - googletest( licensed under BSD 3-Clause)
 
 ## Licensing
@@ -22,7 +31,7 @@ out to me at fotheringham.paul@gmail.com.
 ## Usage
 
 Create a Server instance and install a RequestHandler on it to service
-requests.
+requests. If you want WebSocket support then also install a we::Handler.
 
 ## Notes
 

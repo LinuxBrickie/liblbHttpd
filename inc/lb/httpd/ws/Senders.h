@@ -40,8 +40,8 @@ namespace ws
 
 /** \brief The means of writing to the WebSocket.
 
-    This is provided *by* the \a Handler in the \a Connection object which is
-    passed into the \a ConnectionEstablished callback.
+    This is provided to you *by* the \a Handler in the \a Connection object
+    which is passed to your \a ConnectionEstablished callback.
  */
 class Senders
 {
@@ -53,9 +53,32 @@ public:
   Senders( const Senders& ) = default;
   Senders& operator=( const Senders& ) = default;
 
+  /**
+      \brief Send text data to the WebSocket. Binary not yet supported.
+      \param message The WebSocket frame payload.
+      \param maxFrameSize Maximum frame size. Zero implies unlimited.
+
+      If a frame's size exceeds \a maxFrameSize then the server will split the
+      frame up into multiple frames and send a fragmented message.
+   */
   SendResult sendData( std::string message, size_t maxFrameSize );
+
+  /**
+      \brief Send a close control frame with close code and optional reason.
+      \note If the client sends a close control frame then the server will
+            automatically respond with a matching close frame. This method is
+            intended for when the server wants to intiate the close.
+   */
   SendResult sendClose( encoding::websocket::closestatus::PayloadCode, std::string reason = {} );
+
+  /** \brief Send a ping control frame. */
   SendResult sendPing( std::string payload ) const;
+
+  /**
+      \brief Send a pong control frame.
+      \note The server automatically sends a pong frame in response to a ping
+            so generally this should not be needed.
+   */
   SendResult sendPong( std::string payload ) const;
 
   struct Impl; //!< Opaque implementation detail.

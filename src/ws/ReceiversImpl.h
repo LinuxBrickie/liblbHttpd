@@ -38,11 +38,32 @@ namespace ws
 struct Receivers::Impl
 {
   Impl( DataReceiver ds, ControlReceiver cs )
-    : dataReceiver{ ds }
-    , controlReceiver{ cs }
+    : dataReceiver{ std::move( ds ) }
+    , controlReceiver{ std::move( cs ) }
   {
   }
 
+  void receiveData( ConnectionID id
+                  , DataOpCode dataOpCode
+                  , std::string message ) const
+  {
+    std::scoped_lock l{ mutex };
+    if ( dataReceiver )
+    {
+      dataReceiver( id, dataOpCode, message );
+    }
+  }
+
+  void receiveControl( ConnectionID id
+                     , ControlOpCode controlOpCode
+                     , std::string message ) const
+  {
+    std::scoped_lock l{ mutex };
+    if ( controlReceiver )
+    {
+      controlReceiver( id, controlOpCode, message );
+    }
+  }
   /**
       \brief Should be called when the connection close handshake is initiated
              by either end.
@@ -55,7 +76,8 @@ struct Receivers::Impl
     controlReceiver = {};
   }
 
-  std::mutex mutex;
+private:
+  mutable std::mutex mutex;
 
   /**
       \brief An object for receiving WebSocket data messages.

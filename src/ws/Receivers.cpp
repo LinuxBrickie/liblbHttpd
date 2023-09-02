@@ -18,6 +18,8 @@
 #include <lb/httpd/ws/Receivers.h>
 #include "ReceiversImpl.h"
 
+#include <unordered_map>
+
 
 namespace lb
 {
@@ -36,11 +38,13 @@ Receivers::Receivers( DataReceiver dr, ControlReceiver cr )
 {
 }
 
-bool Receivers::receiveData( ConnectionID id, std::string message )
+bool Receivers::receiveData( ConnectionID id
+                           , DataOpCode dataOpCode
+                           , std::string message )
 {
   if ( d )
   {
-    d->dataReceiver( id, message );
+    d->receiveData( id, dataOpCode, message );
     return true;
   }
 
@@ -53,7 +57,7 @@ bool Receivers::receiveControl( ConnectionID id
 {
   if ( d )
   {
-    d->controlReceiver( id, opCode, payload );
+    d->receiveControl( id, opCode, payload );
     return true;
   }
 
@@ -64,8 +68,7 @@ void Receivers::stopReceiving()
 {
   if ( d )
   {
-    d->dataReceiver    = {};
-    d->controlReceiver = {};
+    d->close();
   }
 }
 
