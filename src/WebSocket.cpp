@@ -17,6 +17,8 @@
 
 #include "WebSocket.h"
 
+#include "ws/SendersImpl.h"
+
 #include <cstring>
 #include <iostream>
 #include <sys/socket.h>
@@ -42,12 +44,60 @@ WebSocket::WebSocket( ws::ConnectionID connectionID
   , socket{ socket }
   , upgradeResponseHandle{ upgradeResponseHandle }
   , closeCallback{ std::move( closeCallback ) }
+  , senders{ ws::Senders::Impl::create( std::bind( &WebSocket::sendMessage
+                                                 , this
+                                                 , std::placeholders::_1
+                                                 , std::placeholders::_2 )
+                                      , std::bind( &WebSocket::sendClose
+                                                 , this
+                                                 , std::placeholders::_1
+                                                 , std::placeholders::_2 )
+                                      , std::bind( &WebSocket::sendPing
+                                                 , this
+                                                 , std::placeholders::_1 )
+                                      , std::bind( &WebSocket::sendPong
+                                                 , this
+                                                 , std::placeholders::_1 ) ) }
 {
 }
 
 WebSocket::~WebSocket()
 {
   closeSocket();
+}
+
+bool WebSocket::canClose() const
+{
+  // Should only get invoked when we have a value so this is a safety check.
+  switch( closeHandshake )
+  {
+  case CloseHandshake::eNone:
+    std::cerr << "Improper request. No close initiated." << std::endl;
+    return false;
+  case CloseHandshake::eServerInitiated:
+  {
+    // Test for time-out while awaiting a close confirmation
+    const size_t closeTimeoutMilliseconds{ 2000 };
+    const TimePoint now{ std::chrono::steady_clock::now() };
+    const auto diffMilliSeconds
+    {
+      std::chrono::duration_cast<std::chrono::milliseconds>( now - closeSentTimePoint )
+    };
+    if ( diffMilliSeconds.count() > closeTimeoutMilliseconds )
+    {
+      std::cerr << "No close confirmation received within " << closeTimeoutMilliseconds
+                << " milliseconds, destroying WebSocket." << std::endl;
+      return false;
+    }
+    break;
+  }
+  case CloseHandshake::eClientInitiated:
+    break;
+  case CloseHandshake::eComplete:
+    break;
+  }
+
+  return true;
 }
 
 void WebSocket::closeSocket()
@@ -59,8 +109,6 @@ void WebSocket::closeSocket()
     // No further need for this now and it is a simple way of ensuring we won't
     // try to close the socket again.
     upgradeResponseHandle = nullptr;
-
-    closeCallback( connectionID );
   }
 }
 
@@ -81,7 +129,7 @@ bool WebSocket::receive()
   else if ( numBytesReceived == 0 )
   {
     // Connection closed
-    return true;
+    return false;
   }
 
   // numBytesReceived > 0
@@ -166,17 +214,46 @@ bool WebSocket::parseFrame( char* p, size_t numBytes )
       break;
     case encoding::websocket::Header::OpCode::eConnectionClose:
     {
+      // Even if we are awaiting a close confirmation we still pass out the
+      // notification here as it could be useful.
       receivers.receiveControl( connectionID
                               , ws::Receivers::ControlOpCode::eClose
                               , frame.payload );
 
-      // Parrot back the payload as per the RFC. Note we can't pass frame.header
-      // here as this will have the masking bit set.
-      encoding::websocket::Header header;
-      header.opCode = encoding::websocket::Header::OpCode::eConnectionClose;
-      header.payloadSize = frame.payload.size();
-      sendFrame( header, frame.payload.c_str() );
-      closeSocket();
+      switch( closeHandshake )
+      {
+      case CloseHandshake::eNone:
+      {
+        closeHandshake = CloseHandshake::eClientInitiated;
+
+        // Parrot back the payload as per the RFC. Note we can't pass frame.header
+        // here as this will have the masking bit set.
+        encoding::websocket::Header header;
+        header.opCode = encoding::websocket::Header::OpCode::eConnectionClose;
+        header.payloadSize = frame.payload.size();
+        sendFrame( header, frame.payload.c_str() );
+
+        ws::Senders::Impl::close( senders );
+        break;
+      }
+      case CloseHandshake::eServerInitiated:
+        // Assume this is the response. TODO - double check payload to ensure
+        // that it matches.
+        closeHandshake = CloseHandshake::eComplete;
+        break;
+      case CloseHandshake::eClientInitiated:
+        // Ignore, we already sent a response.
+        break;
+      case CloseHandshake::eComplete:
+        // Ignore, we already sent a response.
+        break;
+      }
+
+      // Either way we close the socket. Ideally clients who initiate the close
+      // will wait for us to do this (see RFC 6455 Section 7.1.1).
+
+      closeCallback( connectionID );
+
       return false;
     }
     case encoding::websocket::Header::OpCode::ePing:
@@ -207,6 +284,12 @@ bool WebSocket::parseFrame( char* p, size_t numBytes )
 ws::SendResult
 WebSocket::sendMessage( std::string payload, size_t maxFrameSize )
 {
+  // Should not be necessary as we close the Senders::Impl but does no harm.
+  if ( closeHandshake != CloseHandshake::eNone )
+  {
+    return ws::SendResult::eClosed;
+  }
+
   const auto encodedHeaderSize
   {
     encoding::websocket::Header::encodedSizeInBytes( payload.size(), false )
@@ -259,6 +342,12 @@ WebSocket::sendMessage( std::string payload, size_t maxFrameSize )
 ws::SendResult WebSocket::sendClose( encoding::websocket::closestatus::PayloadCode code
                                    , std::string reason )
 {
+  // Should not be necessary as we close the Senders::Impl but does no harm.
+  if ( closeHandshake != CloseHandshake::eNone )
+  {
+    return ws::SendResult::eClosed;
+  }
+
   encoding::websocket::Header header;
   header.opCode = encoding::websocket::Header::OpCode::eConnectionClose;
 
@@ -268,13 +357,25 @@ ws::SendResult WebSocket::sendClose( encoding::websocket::closestatus::PayloadCo
 
   header.payloadSize = payload.size();
 
+  closeHandshake = CloseHandshake::eServerInitiated;
+
+  closeSentTimePoint = std::chrono::steady_clock::now();
+
   sendFrame( header, payload.c_str() );
+
+  closeCallback( connectionID );
 
   return ws::SendResult::eSuccess;
 }
 
 ws::SendResult WebSocket::sendPing( std::string payload )
 {
+  // Should not be necessary as we close the Senders::Impl but does no harm.
+  if ( closeHandshake != CloseHandshake::eNone )
+  {
+    return ws::SendResult::eClosed;
+  }
+
   encoding::websocket::Header header;
   header.opCode = encoding::websocket::Header::OpCode::ePing;
   header.payloadSize = payload.size();
@@ -286,6 +387,12 @@ ws::SendResult WebSocket::sendPing( std::string payload )
 
 ws::SendResult WebSocket::sendPong( std::string payload )
 {
+  // Should not be necessary as we close the Senders::Impl but does no harm.
+  if ( closeHandshake != CloseHandshake::eNone )
+  {
+    return ws::SendResult::eClosed;
+  }
+
   encoding::websocket::Header header;
   header.opCode = encoding::websocket::Header::OpCode::ePong;
   header.payloadSize = payload.size();
@@ -320,7 +427,7 @@ WebSocket::sendFrame( const encoding::websocket::Header& header
     const auto numSentBytes{ ::send( socket, sendBuffer.get(), numBytesToSend, flags ) };
     if ( numSentBytes < 0 )
     {
-      // MHS socket always blocks so this ought to be redundant
+      // MHD socket always blocks so this ought to be redundant
       if ( errno == EAGAIN || errno == EWOULDBLOCK )
       {
         continue;
@@ -342,6 +449,12 @@ WebSocket::sendFrame( const encoding::websocket::Header& header
 void WebSocket::closeConnection( encoding::websocket::closestatus::ProtocolCode statusCode
                                , const std::string& reason )
 {
+  // Should not be necessary as we close the Senders::Impl but does no harm.
+  if ( closeHandshake != CloseHandshake::eNone )
+  {
+    return;
+  }
+
   // RFC6455 Section 5.5.1 states
   //
   // "The Close frame MAY contain a body (the "Application data" portion of
@@ -369,9 +482,11 @@ void WebSocket::closeConnection( encoding::websocket::closestatus::ProtocolCode 
   payload.append( reason );
   header.payloadSize = payload.size();
 
+  closeHandshake = CloseHandshake::eServerInitiated;
+
   sendFrame( header, payload.c_str() );
 
-  closeSocket();
+  closeCallback( connectionID );
 }
 
 

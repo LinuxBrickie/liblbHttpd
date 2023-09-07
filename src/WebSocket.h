@@ -18,13 +18,17 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+#include <lb/httpd/ws/Receivers.h>
+#include <lb/httpd/ws/Senders.h>
+
+#include <lb/encoding/websocket.h>
+
+#include <microhttpd.h>
+
+#include <chrono>
 #include <functional>
 #include <mutex>
 #include <optional>
-
-#include <lb/httpd/Server.h>
-
-#include <lb/encoding/websocket.h>
 
 
 namespace lb
@@ -67,6 +71,8 @@ struct WebSocket
            , MHD_UpgradeResponseHandle* urh
            , CloseCallback closeCallback = {} );
   ~WebSocket();
+
+  bool canClose() const;
 
   void closeSocket();
 
@@ -117,6 +123,11 @@ struct WebSocket
 
   ws::Receivers receivers; //!< Provided via Handler::connectionEstablished
 
+  // This is shared with the ws::Handler::Connection object we pass to the
+  // connectionEstablised callback. We need to retain part ownership because
+  // we need to invalidate it if we go away.
+  ws::Senders senders;
+
   encoding::websocket::Decoder frameParser;
 
   struct Fragmented
@@ -125,7 +136,22 @@ struct WebSocket
     std::string payload;
   };
   std::optional<Fragmented> fragmented;
+
+  // Note that there is no transition from eClientInitiated to eComplete as we
+  // have no way to detect it. They are, effectively, the same state.
+  enum class CloseHandshake
+  {
+    eNone,
+    eServerInitiated,
+    eClientInitiated,
+    eComplete
+  };
+  CloseHandshake closeHandshake{ CloseHandshake::eNone };
+
+  using TimePoint = std::chrono::time_point<std::chrono::steady_clock>;
+  TimePoint closeSentTimePoint;
 };
+
 
 } // End of namespace httpd
 

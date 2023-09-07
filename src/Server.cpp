@@ -641,20 +641,7 @@ void Server::Private::upgradeHandler( void* userData
     server->webSocketHandler->connectionEstablised(
       { connectionID
       , cc->url
-      , ws::Senders::Impl::create( std::bind( &WebSocket::sendMessage
-                                            , &webSocket
-                                            , std::placeholders::_1
-                                            , std::placeholders::_2 )
-                                 , std::bind( &WebSocket::sendClose
-                                            , &webSocket
-                                            , std::placeholders::_1
-                                            , std::placeholders::_2 )
-                                 , std::bind( &WebSocket::sendPing
-                                            , &webSocket
-                                            , std::placeholders::_1 )
-                                 , std::bind( &WebSocket::sendPong
-                                            , &webSocket
-                                            , std::placeholders::_1 ) )
+      , webSocket.senders
       } )
   };
 
@@ -723,7 +710,11 @@ void Server::Private::webSocketLoop()
         std::cerr << "Unknown WebSocket closed!" << std::endl;
         return;
       }
-      webSockets.erase( W );
+      if ( W->second.canClose() )
+      {
+        poller.remove( W->first );
+        webSockets.erase( W );
+      }
     }
     closedWebSockets.clear();
   }

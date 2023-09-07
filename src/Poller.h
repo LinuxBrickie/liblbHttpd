@@ -55,6 +55,7 @@ public:
 
   int operator() ( int timeout )
   {
+    processPendingRemovals();
     processPendingAdds();
 
     pollfd* pfd{ nullptr };
@@ -72,7 +73,7 @@ public:
     else if ( pollResult > 0 )
     {
       bool repoll{ false };
-      int numCallbacksInvoked{ 0 };
+      int numFDsProcessed{ 0 };
       std::vector<int> toRemove;
       toRemove.reserve( pollFDs.size() );
 
@@ -84,17 +85,17 @@ public:
           {
             toRemove.push_back( pollFDs[i].fd );
           }
-          ++numCallbacksInvoked;
+          ++numFDsProcessed;
 
           // Can terminate early if we've reached the number returned by poll.
-          if ( numCallbacksInvoked == pollResult )
+          if ( numFDsProcessed == pollResult )
           {
             break;
           }
         }
       }
 
-      processPendingRemovals( toRemove );
+      bulkRemoval( toRemove );
     }
 
     return pollResult;
@@ -128,7 +129,7 @@ private:
     pendingAdds.clear();
   }
 
-  void processPendingRemovals( const std::vector<int>& extraRemovals )
+  void bulkRemoval( const std::vector<int>& extraRemovals )
   {
     std::scoped_lock l{ pendingRemovalsMutex };
 
@@ -136,6 +137,18 @@ private:
                           , extraRemovals.begin()
                           , extraRemovals.end() );
 
+    processPendingRemovalsNoLock();
+  }
+
+  void processPendingRemovals()
+  {
+    std::scoped_lock l{ pendingRemovalsMutex };
+
+    processPendingRemovalsNoLock();
+  }
+
+  void processPendingRemovalsNoLock()
+  {
     for ( auto& fd : pendingRemovals )
     {
       for ( PollFDs::size_type i = 0; i < pollFDs.size(); ++i )
