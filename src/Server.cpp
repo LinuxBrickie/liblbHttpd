@@ -613,6 +613,9 @@ void Server::Private::upgradeHandler( void* userData
     return;
   }
 
+  std::string url{ std::move( cc->url ) };
+  delete cc;
+
   const auto connectionID{ globalConnectionID++ };
 
   std::scoped_lock l{ server->webSocketMutex };
@@ -623,14 +626,14 @@ void Server::Private::upgradeHandler( void* userData
                               , std::forward_as_tuple( connectionID )
                               , std::forward_as_tuple( connectionID
                                                      , server->config.maxSocketBytesToReceive
-                                                     , cc->url
+                                                     , url
                                                      , socket
                                                      , upgradeHandle
                                                      , std::bind( &Private::webSocketClosed, server, std::placeholders::_1 ) ) )
   };
   if ( !emplacePair.second )
   {
-    std::cerr << "Failed to create WebSocket for " << cc->url << std::endl;
+    std::cerr << "Failed to create WebSocket for " << url << std::endl;
     return;
   }
 
@@ -640,7 +643,7 @@ void Server::Private::upgradeHandler( void* userData
   {
     server->webSocketHandler->connectionEstablised(
       { connectionID
-      , cc->url
+      , url
       , webSocket.senders
       } )
   };
@@ -712,7 +715,7 @@ void Server::Private::webSocketLoop()
       }
       if ( W->second.canClose() )
       {
-        poller.remove( W->first );
+        poller.remove( W->second.socket );
         webSockets.erase( W );
       }
     }
